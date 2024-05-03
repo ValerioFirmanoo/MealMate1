@@ -4,6 +4,8 @@ import os
 import pandas as pd
 from dotenv import load_dotenv
 from openai import OpenAI
+import json
+
 
 def main():
     #st.title("MeatMeal: Your Personalized Meal Planner")
@@ -79,31 +81,43 @@ def page_meal_plan():
         st.warning("Please fill out the survey first.")
         st.stop()
     
+    st.markdown("""
+        <style>
+            div.stButton > button:first-child {
+                display: block;
+                margin: 0 auto;
+            }
+            div.stSpinner > div {
+                display: flex;
+                justify-content: center;
+            }
+        </style>""", unsafe_allow_html=True)
+
     if st.button("Generate Meal Plan"):
-        meal_plan = generate_meal_plan(st.session_state['form_data'])
-        df = pd.DataFrame(meal_plan, columns=["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"])
-        st.table(df)
+        with st.spinner('Generating your meal plan... Please wait'):
+            meal_plan_df = generate_meal_plan(st.session_state['form_data'])
+            st.success('Meal plan generated successfully!')
+            st.table(meal_plan_df)
 
 def generate_meal_plan(form_data):
+#def generate_meal_plan():
+
 
     load_dotenv()
 
-    # Construct prompt based on user inputs
-    prompt = (f"This is an assistant that should help people to improve their nutrition, by providing a personalized meal plan for one week."
+    
+    prompt = (f"you are an assistant that should help people to improve their nutrition, by providing a personalized meal plan for one week."
                 f" You have to generate the meal plan for one week considering breakfast, lunch and dinner (with also a snack during the morning) "
                 f"with the right balance of macronutrient (in each meal except for the snack there should be carbs , proteins and vegetables)."
                 f" The meal plan should be balanced appropriately following this details:"
                 f" Sex: {form_data['sex']}, Weight: {form_data['weight']} kg, Height: {form_data['height']} cm, "
-                f"if {form_data['purpose']} is weight loss, gaining muscles or sportive performance limit the quantity of sugars and sweets and allow max 1/2 cheat meal per week,"
-                f" if it is maintaining health, allow max 2/3 cheat meal per week, if it is sportive performance or gaining muscles Favor protein over other macronutrients."
-                f" Take dishes from the cuisine of {form_data['location']}, if {form_data['cuisine_preference']} is not total take the dishes outside local cuisine from"
+                f" purpose:({form_data['purpose']}) "
+                f" Take {form_data['cuisine_preference']} of the dishes from the cuisine of {form_data['location']}, the other dishes outside local cuisine from"
                 f" {form_data['other_cuisine']}, "
-                f"strictly respect the dietary preferences of {form_data['dietary_preferences']} and avoid the allergens {form_data['allergies_dislikes']}, "
-                f"make sure to include {form_data['food_likes']}, if the food_likes are cheat meals allow only some of them in an adequate number for the purpose of the diet."
-                f" Consider the habits of {form_data['food_habits']}, the preferences on variety: {form_data['variety']}, Complexity: {form_data['complexity']}, Budget: {form_data['budget']}. "
 
                 f"I'll do some examples of how a balanced diet should be composed:"
                 f"breakfast: yogurt with cereals/fruit/walnuts or rusks with proteic cream or marmalade,"
+                f"Snack: chose some fresh friuts or walnuts "
                 f"lunch/dinner: pasta with vegetables and fish or a protein as second dish,"
                 f"rice with a protein (fish/meat or legumes) and vegetables, "
                 f"salad with  a protein (chicken, tuna, fish, eggs,....) and bread or something to accompany the salad with carbs, "
@@ -112,48 +126,26 @@ def generate_meal_plan(form_data):
                 f"oriental dishes like noodles with tofu (or other protein) and vegetables "
                 f"cheese (both in dishes like pasta and ricotta) or also alone with sides of vegeables and carbs"
 
-            f"Please format the plan as follows: Day of the week, Meal type (Breakfast, Lunch, Dinner), and the meal. "
-              "Example output:\n"
-              "Monday: Breakfast - Oatmeal, Lunch - Chicken Salad, Dinner - Grilled Salmon\n"
-              "Tuesday: Breakfast - Greek Yogurt, Lunch - Turkey Wrap, Dinner - Stir Fry Tofu\n"
-              "Wednesday: Breakfast - Smoothie, Lunch - Vegetable Soup, Dinner - Beef Steak\n"
-              "And so on for the entire week.")
-
-    # response = openai.Completion.create(
-    #     engine="gpt-3.5-turbo",
-    #     prompt=prompt,
-    #     max_tokens=500,
-    #     api_key=api_key
-    # )
-
-#     response = openai.ChatCompletion.create(
-#     model="gpt-3.5-turbo",
-#     messages=[{"role": "system", "content": prompt},
-#               ],
-#     max_tokens=500,
-#     api_key=api_key
-# )
+                f"strictly respect the dietary preferences of {form_data['dietary_preferences']} and avoid the allergens {form_data['allergies_dislikes']}, "
+                f"follow the preferences on variety: {form_data['variety']}, Complexity: {form_data['complexity']}, Budget: {form_data['budget']}. "
+                f"follow the habits: {form_data['food_habits']},  "
+                f"give the output in json format keys as days of the weeks and meal types")
 
     client = OpenAI()
     # Ensure your OpenAI API key is correctly set in your environment variables
     
     response = client.chat.completions.create(
-    model="gpt-3.5-turbo",
-    messages=[
-        {"role": "system", "content": prompt}
-    ]
+        model="gpt-3.5-turbo-0125",
+        messages=[
+            {"role": "system", "content": prompt},
+            ],
+        temperature=1,
+        max_tokens=1000,
+        top_p=1,
     )
 
-    text = response.choices[0].text.strip()
-    lines = text.split('\n')
-    meal_plan = {}
-    for line in lines:
-        day_part, meals = line.split(':')
-        meal_plan[day_part.strip()] = [meal.strip().split(' - ')[1] for meal in meals.split(',')]
-    
-    # Convert the dictionary into a DataFrame
-    df = pd.DataFrame.from_dict(meal_plan, orient='index', columns=['Breakfast', 'Lunch', 'Dinner'])
-
+    text = response.choices[0].message.content
+    df = pd.DataFrame(json.loads(text))
     return df
 
 if __name__ == "__main__":
